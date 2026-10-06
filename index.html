@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en" translate="no">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="google" content="notranslate">
+  <meta name="theme-color" content="#071015">
+  <meta name="description" content="SHUTTER DRIFT — a playable photographic evidence system.">
+  <title>SHUTTER DRIFT — Photographic Evidence System</title>
+  <link rel="icon" href="TemplateData/favicon.png">
+  <link rel="stylesheet" href="TemplateData/p3.css">
+  <link rel="stylesheet" href="TemplateData/p3_controllers.css">
+</head>
+<body data-p3-revision="20261003-versioned-web-startup">
+  <header class="site-header">
+    <div class="identity"><strong>SHUTTER DRIFT</strong></div>
+    <div class="header-meta"><span>PLAYABLE PHOTOGRAPHIC ARCHIVE</span><span>UNITY WEBGL</span></div>
+  </header>
+
+  <main id="experience">
+    <section id="intro" class="intro" aria-labelledby="project-title">
+      <div class="intro-image" role="img" aria-label="The Shutter Drift gallery with framed photography and archive lighting"></div>
+      <div class="intro-shade"></div>
+      <div class="intro-copy">
+        <p class="eyebrow">AFTER PHOTOGRAPHY / AI MOVING IMAGE EXPERIMENTS</p>
+        <h1 id="project-title">SHUTTER<br>DRIFT</h1>
+        <p class="deck">A camera game about image judgment, machine suspicion and photographic recovery.</p>
+        <p class="deck zh">摄影游戏：在机器怀疑、人的判断与源图像恢复之间行走。</p>
+
+        <div class="sequence" aria-label="Gameplay sequence">
+          <div><b>01</b><span>EXPLORE</span><small>Walk the gallery</small></div>
+          <div><b>02</b><span>CAPTURE</span><small>Judge the image clues</small></div>
+          <div><b>03</b><span>VERIFY</span><small>File evidence at Terminal</small></div>
+          <div><b>04</b><span>RESTORE</span><small>See the archive change</small></div>
+        </div>
+
+        <div class="launch-row">
+          <button id="launch" class="launch" disabled>ENTER / 进入档案馆</button>
+          <button class="controller-open" data-controller-guide>CONTROLLER GUIDE / 操作指南</button>
+          <button id="about-toggle" class="secondary" aria-expanded="false">PROJECT NOTE</button>
+        </div>
+        <div class="load-track" aria-hidden="true"><i id="load-progress"></i></div>
+        <p id="load-status" class="load-status" role="status" aria-live="polite">Click Enter to load the playable archive. / 点击进入，加载游戏。</p>
+      </div>
+
+      <aside id="project-note" class="project-note" aria-hidden="true" inert>
+        <button id="about-close" class="note-close">CLOSE</button>
+        <p class="eyebrow">PROJECT NOTE</p>
+        <h2>Machine estimate is not a verdict.</h2>
+        <p>You enter an exhibition before opening hours. The system flags images, but only your photographic action turns suspicion into a filed judgment.</p>
+        <dl><div><dt>22</dt><dd>source photographs</dd></div><div><dt>22</dt><dd>archive cases</dd></div><div><dt>5 min</dt><dd>per audit shift</dd></div></dl>
+      </aside>
+    </section>
+
+    <section id="game-shell" class="game-shell" inert aria-label="Shutter Drift playable experience">
+      <div class="game-topbar">
+        <div><span class="live-dot"></span>LIVE ARCHIVE</div>
+        <div class="game-actions"><button data-controller-guide>CONTROLLER GUIDE</button><button id="return-info">PAUSE / PROJECT INFO</button><button id="fullscreen">FULLSCREEN</button></div>
+      </div>
+      <div id="unity-container">
+        <div id="unity-fullscreen-container">
+          <canvas id="unity-canvas" width="960" height="600" tabindex="0"></canvas>
+          <div id="unity-warning"></div>
+        </div>
+      </div>
+      <div class="control-strip"><span>WASD MOVE</span><span>MOUSE LOOK</span><span>RMB CAMERA</span><span>LMB CAPTURE</span><span>E SUBMIT</span><span>X DISCARD</span></div>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('unity-canvas');
+    const intro = document.getElementById('intro');
+    const gameShell = document.getElementById('game-shell');
+    const launch = document.getElementById('launch');
+    const progress = document.getElementById('load-progress');
+    const loadStatus = document.getElementById('load-status');
+    const note = document.getElementById('project-note');
+    const aboutToggle = document.getElementById('about-toggle');
+    let unityInstance = null;
+    let ready = false;
+    let loading = false;
+    let loadingFailed = false;
+    launch.disabled = false;
+    canvas.addEventListener("contextmenu", event => event.preventDefault());
+    document.addEventListener("keydown", event => { if (event.key === "Escape") setNote(false); });
+
+    function unityShowBanner(message, type) {
+      if (type === 'error') console.error('[P3 player] ' + message);
+      const banner = document.getElementById('unity-warning');
+      const item = document.createElement('div');
+      item.textContent = type === 'error' ? 'Game could not start. Click Retry to reload. / 游戏启动失败，请点重试重新加载。' : message;
+      item.className = type || 'warning';
+      banner.appendChild(item);
+      if (type !== 'error') setTimeout(() => item.remove(), 6000);
+    }
+
+    // Pointer lock is recoverable when the browser tab loses focus. Do not
+    // turn its rejected Promise into Unity's global fatal-error dialog.
+    const requestMouseLock = canvas.requestPointerLock?.bind(canvas);
+    if (requestMouseLock) canvas.requestPointerLock = options => {
+      try {
+        const request = requestMouseLock(options);
+        return request?.catch(error => {
+          console.warn('P3 mouse focus: ' + error.name);
+          unityShowBanner('Mouse focus was released. Click inside the game to continue.', 'warning');
+        });
+      } catch (error) {
+        console.warn('P3 mouse focus: ' + error.name);
+      }
+    };
+
+    function setNote(open) {
+      note.inert = !open;
+      note.classList.toggle('is-open', open);
+      note.setAttribute('aria-hidden', String(!open));
+      aboutToggle.setAttribute('aria-expanded', String(open));
+    }
+    aboutToggle.addEventListener('click', () => setNote(!note.classList.contains('is-open')));
+    document.getElementById('about-close').addEventListener('click', () => setNote(false));
+
+    function enterGame() {
+      // A failed Emscripten runtime cannot be restarted safely in the same page.
+      if (loadingFailed) { location.reload(); return; }
+      if (!ready) { if (!loading) startLoading(); return; }
+      intro.classList.add('is-dismissed');
+      document.body.classList.add('is-playing');
+      intro.inert = true;
+      gameShell.inert = false;
+      setPaused(false);
+      canvas.focus();
+    }
+    launch.addEventListener('click', enterGame);
+    function setPaused(paused) {
+      unityInstance?.SendMessage('P3_Web_Experience', 'SetPaused', paused ? '1' : '0');
+    }
+    function returnToProject() {
+      setPaused(true);
+      document.exitPointerLock?.();
+      intro.inert = false;
+      gameShell.inert = true;
+      intro.classList.remove('is-dismissed');
+      document.body.classList.remove('is-playing');
+      launch.textContent = 'RESUME / 继续游戏';
+      launch.focus();
+    }
+    document.getElementById('return-info').addEventListener('click', returnToProject);
+    window.addEventListener('p3-return-project', returnToProject);
+    document.addEventListener('visibilitychange', () => {
+      setPaused(document.hidden || !document.body.classList.contains('is-playing') || document.getElementById('controller-guide')?.open);
+    });
+    document.getElementById('fullscreen').addEventListener('click', () => unityInstance?.SetFullscreen(1));
+
+    if (new URLSearchParams(location.search).get('p3qa') === '1') {
+      const controls = document.createElement('div');
+      controls.style.cssText = 'position:fixed;bottom:40px;left:20px;right:20px;z-index:50;display:flex;flex-wrap:wrap;gap:8px';
+      for (const [label, method, value] of [['FLOOR VIEW','View','floor'],['SIDE VIEW','View','side'],['ENTRY VIEW','View','entry'],['WALL A','View','wall-a'],['WALL B','View','wall-b'],['WALL C','View','wall-c'],['OPTICAL BENCH','View','installation-bench'],['WINDOW LEFT','View','installation-left'],['WINDOW RIGHT','View','installation-right'],['BUDGET 8','Lighting','budget8'],['BUDGET 96','Lighting','pixel'],['RUN FULL FLOW','Run',''],['SAVE FRAME','Frame','manual']]) {
+        const button = document.createElement('button');
+        button.textContent = label;
+        button.style.cssText = 'background:#102d36;color:#e8f4f5;border:1px solid #65c4c8;padding:9px';
+        button.onclick = () => unityInstance?.SendMessage(['Run','Frame','Compare','Inspect'].includes(method) ? 'P3_Web_Flow_Capture' : 'P3_Web_Visual_QA', method, value);
+        controls.appendChild(button);
+      }
+      const status = document.createElement("span"); status.id="p3-qa-status"; status.style.cssText="color:white;font:12px monospace"; controls.appendChild(status);
+      for (const [label,method] of [['CAPTURE CORRECT / INCORRECT','Compare'],['INSPECT SHIFT STATE','Inspect']]) {
+        const button=document.createElement('button');button.textContent=label;button.onclick=()=>unityInstance?.SendMessage('P3_Web_Flow_Capture',method,'');controls.appendChild(button);
+      }
+      document.body.appendChild(controls);
+    }
+
+    const buildUrl = 'Build';
+    const buildRevision = '09eed6b5d5473962-adcaa42bcfc6262b';
+    const buildAsset = filename => buildUrl + '/' + filename + '?p3build=' + buildRevision;
+    const loaderUrl = buildAsset('WebComplete.loader.js');
+    const config = {
+      arguments: [],
+      dataUrl: buildAsset('WebComplete.data.unityweb'),
+      frameworkUrl: buildAsset('WebComplete.framework.js.unityweb'),
+      codeUrl: buildAsset('WebComplete.wasm.unityweb'),
+      streamingAssetsUrl: 'StreamingAssets',
+      fullscreenElementID: 'unity-fullscreen-container',
+      companyName: "MIMA Portfolio Unity6 Upgrade Test",
+      productName: "Shutter Drift Unity6 Test",
+      productVersion: "1.0",
+      showBanner: unityShowBanner,
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+      autoSyncPersistentDataPath: true
+    };
+
+    function startLoading() {
+    loading = true;
+    launch.disabled = true;
+    const script = document.createElement('script');
+    script.src = loaderUrl;
+    script.onload = () => createUnityInstance(canvas, config, value => {
+      const percent = Math.round(value * 100);
+      progress.style.width = percent + '%';
+      launch.textContent = value < 1 ? `LOADING ARCHIVE ${percent}%` : 'ENTER THE ARCHIVE';
+      loadStatus.textContent = value < 1 ? `Loading archive… ${percent}% / 正在加载` : 'Archive ready. Headphones recommended.';
+    }).then(instance => {
+      unityInstance = instance;
+      ready = true;
+      launch.disabled = false;
+      launch.textContent = 'ENTER THE ARCHIVE';
+      progress.style.width = '100%';
+      loadStatus.textContent = 'Archive ready. Headphones recommended.';
+      if (!document.hidden) enterGame();
+    }).catch(error => {
+      console.error('[P3 startup failed]', error);
+      loading = false;
+      loadingFailed = true;
+      launch.disabled = false;
+      launch.textContent = 'RETRY / 重试';
+      loadStatus.textContent = 'Game could not start. Click Retry to reload. / 游戏启动失败，请点重试重新加载。';
+      unityShowBanner(String(error), 'error');
+    });
+    script.onerror = () => { loading = false; loadingFailed = true; launch.disabled = false; launch.textContent = 'RETRY / 重试'; loadStatus.textContent = 'Connection failed. Click Retry to reload. / 加载失败，请点重试重新加载。'; };
+    document.body.appendChild(script);
+    }
+  </script>
+  <script src="TemplateData/p3_controllers.js"></script>
+</body>
+</html>
