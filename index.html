@@ -133,6 +133,10 @@
     function setPaused(paused) {
       unityInstance?.SendMessage('P3_Web_Experience', 'SetPaused', paused ? '1' : '0');
     }
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement && !document.body.classList.contains('is-playing'))
+        document.exitPointerLock?.();
+    });
     function returnToProject() {
       setPaused(true);
       document.exitPointerLock?.();
@@ -168,7 +172,7 @@
     }
 
     const buildUrl = 'Build';
-    const buildRevision = '872b7dc77b67cf6c-b05635686e2ea7a0';
+    const buildRevision = '2025060de549b389-9d790e5ff0eece7f';
     const buildAsset = filename => buildUrl + '/' + filename + '?p3build=' + buildRevision;
     const loaderUrl = buildAsset('WebComplete.loader.js');
     const config = {
